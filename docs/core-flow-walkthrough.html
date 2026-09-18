@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" translate="no">
 <head>
   <meta charset="UTF-8" />
+  <meta name="google" content="notranslate" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>GoAgent · 核心流程演示</title>
   <style>
@@ -665,7 +666,7 @@
         for (let i = 1; i <= 24; i++) {
           state.moveNumber = i;
           drawBoard();
-          const wait = await sleep(42);
+          const wait = await sleep(70);
           if (wait === "stop") return;
         }
       },
@@ -690,7 +691,7 @@
           state.evaluations.push(blackWr);
           $("liveStatus").textContent = `快扫 ${i}/24 · ${Math.round(80 + i * 7)} vis/s`;
           drawWinrate();
-          const wait = await sleep(55);
+          const wait = await sleep(90);
           if (wait === "stop") return;
         }
         $("issues").innerHTML = `
