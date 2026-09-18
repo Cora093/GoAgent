@@ -99,13 +99,57 @@ for (const keyword of [
   'https://github.com/wimi321/lizzieyzy-next/releases',
   'catalogFetchAttempts = 3',
   'fetchCatalogWithRetry',
-  'TensorRT 高性能版',
+  'NVIDIA CUDA',
+  'RTX 20 / 30 / 40 / 50',
+  'AMD RX 9000',
+  'amd-rocm-experimental',
+  'rocm-gfx120x',
+  'RX 6000 / RX 7000 / Ryzen AI Max',
+  'data-amd-release-link',
+  'safeGithubReleaseUrl',
+  'TensorRT 可选版',
+  'tensorrt-optional',
+  'RTX 30 / 40 / 50 优先使用 CUDA，通常更快',
+  'TensorRT 仅为 RTX 20 / GTX 16 提速',
+  '/\\.7z\\.(001|002)$/',
+  'usable.length !== requiredAssets',
   'CPU 通用版',
   'Apple 芯片',
   'Intel 芯片',
   '下载小更新',
 ]) {
   if (!downloadChooser.includes(keyword)) fail(`download chooser must contain: ${keyword}`)
+}
+const nvidiaRow = downloadChooser.indexOf("['nvidia', 'windows-portable', 'nvidia'")
+const amdRow = downloadChooser.indexOf("['amd', 'amd-rocm-experimental', 'rocm-gfx120x', 'x64'")
+const openclRow = downloadChooser.indexOf("['opencl', 'windows-portable', 'opencl'")
+if (!(nvidiaRow >= 0 && amdRow > nvidiaRow && openclRow > amdRow)) {
+  fail('download chooser must place AMD RX 9000 between NVIDIA CUDA and OpenCL')
+}
+for (const keyword of ['ROCm 實驗版', 'Experimental ROCm', 'ROCm 実験版', 'ROCm 실험판', 'ROCm รุ่นทดลอง', 'ROCm thử nghiệm']) {
+  if (!downloadChooser.includes(keyword)) fail(`download chooser must localize AMD RX 9000: ${keyword}`)
+}
+if (downloadChooser.includes('tensorrt-advanced')) fail('download chooser must use the stable TensorRT catalog category')
+if (downloadChooser.includes('RTX 30 系及以下可选')) fail('TensorRT recommendation must not target RTX 30')
+for (const keyword of [
+  'TensorRT 僅供 RTX 20 / GTX 16 加速',
+  'TensorRT is for speeding up RTX 20 / GTX 16 only',
+  'TensorRT は RTX 20 / GTX 16 の高速化用のみ',
+  'TensorRT는 RTX 20 / GTX 16 가속용만',
+  'TensorRT ใช้เร่ง RTX 20 / GTX 16 เท่านั้น',
+  'TensorRT chỉ để tăng tốc RTX 20 / GTX 16',
+]) {
+  if (!downloadChooser.includes(keyword)) fail(`download chooser must localize TensorRT guidance: ${keyword}`)
+}
+for (const keyword of [
+  '通常比 CUDA 更快',
+  'often faster than CUDA',
+  'CUDA より高速な場合あり',
+  'CUDA보다 빠른 경우가 많음',
+  'มักเร็วกว่า CUDA',
+  'thường nhanh hơn CUDA',
+]) {
+  if (downloadChooser.includes(keyword)) fail(`download chooser must not imply TensorRT is generally faster: ${keyword}`)
 }
 for (const keyword of ['www.goagent.top', 'goagent.top', 'Response.redirect', 'env.ASSETS.fetch']) {
   if (!edgeWorker.includes(keyword)) fail(`edge worker must contain: ${keyword}`)
@@ -114,6 +158,9 @@ if (!edgeWorker.includes('301')) fail('edge worker must permanently redirect www
 if (existsSync(join(root, 'website/public/_redirects'))) fail('legacy _redirects must not compete with the edge worker')
 for (const keyword of ['Cloudflare R2', 'mirrorUrls', 'SHA256', 'manifest']) {
   if (downloadChooser.includes(keyword)) fail(`download chooser should avoid implementation wording: ${keyword}`)
+}
+for (const keyword of ['nvidia50.cuda', 'rtx50:', 'CPU build if unsure', '不确定时优先使用 CPU 通用版']) {
+  if (downloadChooser.includes(keyword)) fail(`download chooser must not restore the obsolete Windows recommendation: ${keyword}`)
 }
 for (const keyword of ['不用研究术语', '第一步：先下载 LizzieYzy Next', '官网下载中心']) {
   if (!docsPage.includes(keyword)) fail(`docs page must contain simple user guidance: ${keyword}`)
