@@ -81,12 +81,14 @@
       display: grid;
       grid-template-columns: repeat(9, minmax(0, 1fr));
       gap: 6px;
+      min-width: 0;
     }
     .tl {
       border: 1px solid var(--border-soft);
       background: rgba(255,253,247,.72);
       border-radius: 10px;
-      padding: 8px 8px 7px;
+      padding: 7px 6px 6px;
+      min-width: 0;
       min-height: 52px;
       text-align: left;
       transition: 160ms ease;
@@ -383,7 +385,7 @@
       ["B","R14"],["W","O17"],["B","R6"],["W","N4"],
       ["B","P3"],["W","M3"],["B","K4"],["W","C6"],
       ["B","D6"],["W","C5"],["B","E6"],["W","F3"],
-      ["B","Q10"],["W","N16"],["B","K16"],["W","J17"]
+      ["B","P10"],["W","N16"],["B","N14"],["W","J17"]
     ];
     const CANDIDATES = [
       { move: "Q10", winrate: 61, score: 4.8, visits: 1824, order: 1 },
@@ -478,7 +480,9 @@
         html += `<text x="${x}" y="${y+4}" text-anchor="middle" font-size="8.5" font-weight="800" fill="${color === "B" ? "#f4efe3" : "#333"}">${index+1}</text>`;
       });
       if (state.showCandidates) {
+        const occupied = new Set(MOVES.slice(0, state.moveNumber).map((item) => item[1]));
         CANDIDATES.forEach((c) => {
+          if (occupied.has(c.move)) return;
           const { col, rowFromTop } = gtpXY(c.move);
           const [x,y] = xy(col, rowFromTop);
           html += `<circle cx="${x}" cy="${y}" r="14" fill="rgba(15,127,118,.16)" stroke="#0f7f76" stroke-width="2"/>`;
@@ -498,12 +502,14 @@
         const y = 8 + (100 - v) / 100 * 76;
         path += (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
       });
-      const cursorX = state.moveNumber <= 0 ? 8 : 8 + (state.moveNumber - 1) * (504 / Math.max(Math.max(evals.length, 24) - 1, 1));
+        const cursor = state.moveNumber > 0
+          ? 8 + (state.moveNumber - 1) * (504 / Math.max(Math.max(evals.length, 24) - 1, 1))
+          : null;
       svg.innerHTML = `
         <rect x="0" y="0" width="520" height="92" rx="8" fill="#fffdf7"/>
         <line x1="8" y1="46" x2="512" y2="46" stroke="rgba(55,49,39,.16)"/>
         <path d="${path}" fill="none" stroke="#4f9b91" stroke-width="2.2"/>
-        <line x1="${cursorX}" y1="8" x2="${cursorX}" y2="84" stroke="#c9655f" stroke-width="1.4"/>
+        ${cursor === null ? "" : `<line x1="${cursor}" y1="8" x2="${cursor}" y2="84" stroke="#c9655f" stroke-width="1.4"/>`}
         <text x="12" y="16" font-size="10" fill="#756d60">黑胜率走势 · 快扫 + 关键手精读</text>
       `;
     }
@@ -721,7 +727,7 @@
         $("prompt").value = "分析当前手为什么亏。";
         thread(`
           <div class="msg student">分析当前手为什么亏。</div>
-          <div class="tool running"><span class="st">running</span>teacher.classifyIntent<br>识别为 current-move · high · mode=current-move</div>
+          <div class="tool"><span class="st">done</span>任务识别<br><code>teacher.classifyIntent</code> · current-move · high</div>
         `);
         setPipeline(["ui", "ipc", "main", "agent"]);
       },
@@ -745,7 +751,8 @@
           appendThread(`<div class="tool running"><span class="st">running</span>${label}<br><code>${name}</code></div>`);
           const wait = await sleep(520);
           if (wait === "stop") return;
-          const last = $("thread").querySelector(".tool.running");
+          const running = $("thread").querySelectorAll(".tool.running");
+          const last = running[running.length - 1];
           if (last) last.outerHTML = `<div class="tool"><span class="st">done</span>${label}<br>${detail}</div>`;
         }
       },
