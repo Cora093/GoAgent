@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GoAgent · 核心流程演示</title>
+  <style>
+    :root {
+      --bg-app: #eee7d8;
+      --bg-app-2: #f6f0e6;
+      --bg-panel: #fbf7ef;
+      --bg-panel-2: #f3ecdf;
+      --bg-elevated: #fffdf7;
+      --border-soft: rgba(55, 49, 39, 0.12);
+      --border-strong: rgba(55, 49, 39, 0.2);
+      --text-main: #29251f;
+      --text-muted: #756d60;
+      --text-faint: #9c9384;
+      --gold: #b99651;
+      --gold-strong: #c9a45b;
+      --green: #4f936a;
+      --teal: #4f9b91;
+      --blue: #557f9d;
+      --red: #c9655f;
+      --orange: #b97545;
+      --board-light: #d8ad6b;
+      --board-mid: #bf8747;
+      --board-dark: #7c5229;
+      --board-line: rgba(38, 22, 11, 0.74);
+      --shadow-soft: 0 18px 48px rgba(75, 57, 31, 0.12);
+      --shadow-hard: 0 28px 80px rgba(70, 49, 25, 0.2);
+      --font: "Avenir Next", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+      --mono: "SF Mono", "JetBrains Mono", "Menlo", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--font);
+      color: var(--text-main);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(243, 215, 156, 0.42), transparent 34%),
+        radial-gradient(circle at 88% 8%, rgba(79, 155, 145, 0.16), transparent 32%),
+        var(--bg-app);
+    }
+    button { font-family: inherit; cursor: pointer; }
+    .page {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      min-height: 100vh;
+      gap: 12px;
+      padding: 16px 18px 18px;
+    }
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-end;
+    }
+    .brand { display: flex; gap: 12px; align-items: center; }
+    .logo {
+      width: 42px; height: 42px; border-radius: 12px;
+      box-shadow: 0 10px 22px rgba(82, 61, 26, 0.18);
+    }
+    .hero h1 { margin: 0; font-size: 22px; letter-spacing: 0.01em; }
+    .hero p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
+    .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .controls button, .chip {
+      border: 1px solid var(--border-soft);
+      background: var(--bg-elevated);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-main);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+    }
+    .controls button.primary { background: #1f2526; color: #fffaf0; border-color: #1f2526; }
+    .controls button:disabled { opacity: .45; cursor: default; }
+    .step-index { color: var(--text-muted); font-size: 12px; font-weight: 700; }
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(9, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .tl {
+      border: 1px solid var(--border-soft);
+      background: rgba(255,253,247,.72);
+      border-radius: 10px;
+      padding: 8px 8px 7px;
+      min-height: 52px;
+      text-align: left;
+      transition: 160ms ease;
+    }
+    .tl b { display: block; font-size: 11px; }
+    .tl span { display: block; margin-top: 2px; color: var(--text-faint); font-size: 10px; }
+    .tl.active { border-color: #007f86; background: #e2f4f2; box-shadow: 0 0 0 3px rgba(0,127,134,.12); }
+    .tl.done { background: #f4efe3; }
+    .pipeline {
+      display: flex; align-items: center; gap: 6px; overflow: auto;
+      padding: 8px 10px; border: 1px solid var(--border-soft);
+      border-radius: 14px; background: rgba(255,253,247,.7);
+    }
+    .node {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-muted);
+      background: var(--bg-panel-2);
+      border: 1px solid transparent;
+    }
+    .node.on { color: #0f4f4c; background: #d7f0ec; border-color: #7cbcb4; }
+    .arrow { color: var(--text-faint); font-size: 12px; }
+    .desktop {
+      min-height: 0;
+      border: 1px solid rgba(255,255,255,.72);
+      border-radius: 18px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #fffdf8, var(--bg-app));
+      box-shadow: var(--shadow-hard);
+      display: grid;
+      grid-template-rows: 46px minmax(0, 1fr);
+    }
+    .titlebar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border-soft);
+      background: linear-gradient(180deg, #fffaf0, #f8f0e2);
+    }
+    .dots { display: flex; gap: 6px; }
+    .dots i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+    .dots i:nth-child(1) { background: #e28b7a; }
+    .dots i:nth-child(2) { background: #e0c070; }
+    .dots i:nth-child(3) { background: #7dbe8d; }
+    .titlebar strong { font-size: 13px; }
+    .pills { display: flex; gap: 6px; }
+    .pill {
+      font-size: 11px; font-weight: 800; border-radius: 999px;
+      padding: 3px 8px; background: #efe6d4; color: var(--text-muted);
+    }
+    .pill.good { background: #dceee3; color: #2d6b46; }
+    .studio {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) 340px;
+    }
+    .library, .teacher { background: var(--bg-panel); min-height: 0; overflow: auto; }
+    .library { border-right: 1px solid var(--border-soft); padding: 12px; }
+    .teacher { border-left: 1px solid var(--border-soft); padding: 12px; display: flex; flex-direction: column; }
+    .workspace { min-height: 0; display: grid; grid-template-rows: 54px minmax(0, 1fr) 118px; background: var(--bg-app-2); }
+    .h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .h strong { font-size: 13px; }
+    .h span { color: var(--text-faint); font-size: 11px; font-weight: 700; }
+    .row { display: flex; gap: 6px; margin-bottom: 10px; }
+    .mini {
+      flex: 1; border: 1px solid var(--border-soft); background: var(--bg-elevated);
+      border-radius: 10px; padding: 7px 8px; font-size: 12px; font-weight: 700;
+    }
+    .mini.hot { outline: 2px solid #007f86; background: #eaf7f5; }
+    input.fox {
+      width: 100%; border: 1px solid var(--border-soft); border-radius: 10px;
+      padding: 8px 10px; background: #fff; font-size: 12px; margin-bottom: 8px;
+    }
+    .game {
+      border: 1px solid var(--border-soft); background: #fffdf8; border-radius: 12px;
+      padding: 8px 10px; margin-bottom: 7px; cursor: pointer;
+    }
+    .game.selected { border-color: #007f86; background: #eaf7f5; }
+    .game b { display: block; font-size: 12px; }
+    .game small { color: var(--text-muted); font-size: 11px; }
+    .student {
+      margin-top: 10px; border-radius: 12px; padding: 10px;
+      background: linear-gradient(180deg, #fff, #f4ece0);
+      border: 1px solid var(--border-soft);
+      font-size: 12px;
+    }
+    .student em { color: var(--orange); font-style: normal; font-weight: 800; }
+    .context {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 12px; border-bottom: 1px solid var(--border-soft); background: var(--bg-panel);
+    }
+    .context h2 { margin: 0; font-size: 14px; }
+    .context p { margin: 2px 0 0; color: var(--text-muted); font-size: 11px; }
+    .live { font-size: 11px; font-weight: 800; color: var(--teal); }
+    .live.warn { color: var(--orange); }
+    .board-wrap { display: grid; place-items: center; padding: 8px; }
+    .board-card {
+      width: min(100%, 560px); aspect-ratio: 1;
+      border-radius: 16px; padding: 10px;
+      background: linear-gradient(145deg, var(--board-light), var(--board-mid) 58%, #a56a34);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 16px 40px rgba(70,49,25,.22);
+    }
+    svg.goban { width: 100%; height: 100%; display: block; }
+    .timeline-panel {
+      border-top: 1px solid var(--border-soft);
+      background: var(--bg-panel);
+      padding: 8px 12px 10px;
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr);
+      gap: 10px;
+    }
+    .issues { font-size: 11px; }
+    .issue { padding: 4px 0; color: var(--text-muted); }
+    .issue.active { color: var(--red); font-weight: 800; }
+    .winrate { height: 92px; }
+    .teacher-head { display: flex; justify-content: space-between; align-items: center; }
+    .quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+    .quick button { font-size: 11px; }
+    .quick button.hot { outline: 2px solid #007f86; }
+    .thread {
+      flex: 1; overflow: auto; background: #fffaf1; border: 1px solid var(--border-soft);
+      border-radius: 12px; padding: 10px; min-height: 180px;
+    }
+    .msg { margin: 0 0 10px; font-size: 12.5px; line-height: 1.55; }
+    .msg.student { color: var(--blue); font-weight: 700; }
+    .tool {
+      border: 1px dashed var(--border-strong); border-radius: 10px;
+      padding: 6px 8px; margin: 6px 0; background: #f6f1e6; font-size: 11px;
+    }
+    .tool .st { float: right; color: var(--green); font-weight: 800; }
+    .tool.running .st { color: var(--orange); }
+    .composer {
+      display: flex; gap: 6px; margin-top: 8px;
+    }
+    .composer input {
+      flex: 1; border: 1px solid var(--border-soft); border-radius: 10px;
+      padding: 8px 10px; font-size: 12px;
+    }
+    .composer button {
+      border: 0; border-radius: 10px; background: #1f2526; color: #fffaf0;
+      padding: 8px 12px; font-weight: 800; font-size: 12px;
+    }
+    .narration {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 12px;
+    }
+    .card {
+      border: 1px solid var(--border-soft);
+      background: rgba(255,253,247,.82);
+      border-radius: 14px;
+      padding: 12px 14px;
+      box-shadow: var(--shadow-soft);
+    }
+    .card h3 { margin: 0 0 6px; font-size: 13px; }
+    .card p { margin: 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.55; }
+    .chain {
+      margin: 0; padding-left: 16px; font-family: var(--mono);
+      font-size: 11px; color: #3f4a49; line-height: 1.7;
+    }
+    #ghost {
+      position: fixed; left: 0; top: 0; width: 16px; height: 16px;
+      border-radius: 50% 50% 50% 0; transform: translate(-40px,-40px) rotate(-30deg);
+      background: #1f2526; box-shadow: 0 8px 16px rgba(0,0,0,.28);
+      pointer-events: none; z-index: 50; opacity: 0; transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .2s;
+    }
+    #ghost.click { transform: translate(var(--x), var(--y)) rotate(-30deg) scale(.86); }
+    .note { color: var(--text-faint); font-size: 11px; margin-top: 8px; }
+    @media (max-width: 1180px) {
+      .studio { grid-template-columns: 180px minmax(0,1fr) 280px; }
+      .timeline { grid-template-columns: repeat(3, 1fr); }
+      .narration { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 860px) {
+      .page { display: block; }
+      .studio { display: block; }
+      .workspace { min-height: 520px; }
+      .desktop { min-height: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="ghost"></div>
+  <div class="page">
+    <header class="hero">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 1024 1024" aria-hidden="true">
+          <rect x="74" y="54" width="876" height="916" rx="132" fill="#efc989"/>
+          <circle cx="454" cy="430" r="100" fill="#17191a"/>
+          <circle cx="604" cy="586" r="92" fill="#f4eee3"/>
+          <path d="M810 284C832 334 854 356 904 378C854 400 832 422 810 472C788 422 766 400 716 378C766 356 788 334 810 284Z" fill="#0f8f85"/>
+        </svg>
+        <div>
+          <h1>GoAgent 核心流程演示</h1>
+          <p>基于上游 v0.4.21 源码还原：KataGo 做事实判断，老师智能体调用工具，多模态 LLM 负责讲清楚。</p>
+        </div>
+      </div>
+      <div class="controls">
+        <span class="step-index" id="stepIndex">步骤 0 / 9</span>
+        <button class="primary" id="playBtn" type="button">播放模拟流程</button>
+        <button id="pauseBtn" type="button" disabled>暂停</button>
+        <button id="nextBtn" type="button">下一步</button>
+        <button id="resetBtn" type="button">重来</button>
+      </div>
+    </header>
+
+    <nav class="timeline" id="timeline"></nav>
+    <div class="pipeline" id="pipeline"></div>
+
+    <section class="desktop" aria-label="GoAgent 工作台模拟">
+      <div class="titlebar">
+        <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+        <strong>GoAgent · 围棋智能体</strong>
+        <div class="pills">
+          <span class="pill" id="kgPill">KataGo 未连接</span>
+          <span class="pill" id="llmPill">LLM 未配置</span>
+        </div>
+      </div>
+      <div class="studio">
+        <aside class="library">
+          <div class="h"><strong>棋谱库</strong><span>Fox &amp; SGF</span></div>
+          <input class="fox" id="foxInput" value="" placeholder="野狐昵称，例如 小明" />
+          <div class="row">
+            <button class="mini" id="syncBtn" type="button">同步野狐</button>
+            <button class="mini" id="importBtn" type="button">导入 SGF</button>
+          </div>
+          <div id="gameList"></div>
+          <div class="student" id="studentCard">尚未绑定棋手。同步野狐或导入 SGF 后会写入本地画像。</div>
+        </aside>
+        <main class="workspace">
+          <header class="context">
+            <div>
+              <h2 id="gameTitle">未选择棋谱</h2>
+              <p id="gameMeta">从左侧同步或导入一盘棋，加载后会自动开始 KataGo 分析。</p>
+            </div>
+            <div class="live warn" id="liveStatus">等待棋谱</div>
+          </header>
+          <div class="board-wrap">
+            <div class="board-card"><svg class="goban" id="goban" viewBox="0 0 640 640"></svg></div>
+          </div>
+          <section class="timeline-panel">
+            <div class="issues" id="issues">
+              <div class="issue">关键手会在快扫后出现</div>
+            </div>
+            <svg class="winrate" id="winrate" viewBox="0 0 520 92"></svg>
+          </section>
+        </main>
+        <aside class="teacher">
+          <div class="teacher-head">
+            <strong>AI 老师</strong>
+            <span style="color:var(--text-faint);font-size:11px;font-weight:700">TeacherAgentRuntime</span>
+          </div>
+          <div class="quick">
+            <button class="mini" id="qCurrent" type="button">分析当前手</button>
+            <button class="mini" id="qGame" type="button">复盘整盘</button>
+            <button class="mini" id="qRecent" type="button">最近 10 局</button>
+            <button class="mini" id="qPlan" type="button">训练计划</button>
+          </div>
+          <div class="thread" id="thread">
+            <div class="msg">老师不是聊天框。快捷按钮和自然语言都会进入同一个 agent 循环：先调工具拿证据，再让 LLM 讲棋。</div>
+          </div>
+          <form class="composer" id="composer">
+            <input id="prompt" value="分析当前手为什么亏。" />
+            <button type="submit">发送</button>
+          </form>
+        </aside>
+      </div>
+    </section>
+
+    <section class="narration">
+      <article class="card">
+        <h3 id="narrTitle">准备开始</h3>
+        <p id="narrBody">这不是玩具示意，而是按仓库真实调用链还原的核心旅程：选谱 → KataGo 分析 → 老师分类意图 → 工具取证 → 多模态 LLM 讲解 → 证据门禁与画像回写。</p>
+        <p class="note">样例棋局来自 <code>src/renderer/src/features/gallery/uiGalleryMock.ts</code>：第 24 手白棋 J17，KataGo 首选 Q10，胜率损失约 13%。</p>
+      </article>
+      <article class="card">
+        <h3>源码调用链</h3>
+        <ol class="chain" id="chain">
+          <li>打开 docs/core-flow-walkthrough.html</li>
+          <li>对照 src/renderer/src/App.tsx 三栏布局</li>
+          <li>对照 src/main/services/teacherAgent.ts 工具循环</li>
+        </ol>
+      </article>
+    </section>
+  </div>
+
+  <script>
+    const LETTERS = "ABCDEFGHJKLMNOPQRST";
+    const MOVES = [
+      ["B","D4"],["W","Q16"],["B","Q4"],["W","D16"],
+      ["B","C14"],["W","C17"],["B","F16"],["W","D10"],
+      ["B","R14"],["W","O17"],["B","R6"],["W","N4"],
+      ["B","P3"],["W","M3"],["B","K4"],["W","C6"],
+      ["B","D6"],["W","C5"],["B","E6"],["W","F3"],
+      ["B","Q10"],["W","N16"],["B","K16"],["W","J17"]
+    ];
+    const CANDIDATES = [
+      { move: "Q10", winrate: 61, score: 4.8, visits: 1824, order: 1 },
+      { move: "K16", winrate: 57, score: 3.6, visits: 1096, order: 2 },
+      { move: "C10", winrate: 53, score: 1.5, visits: 684, order: 3 },
+      { move: "R9",  winrate: 49, score: -0.5, visits: 276, order: 4 }
+    ];
+    const PIPELINE = [
+      ["ui", "Renderer"],
+      ["ipc", "Preload IPC"],
+      ["main", "Electron Main"],
+      ["sgf", "SGF / 野狐"],
+      ["kg", "KataGo"],
+      ["kb", "知识库"],
+      ["profile", "学生画像"],
+      ["llm", "LLM 适配器"],
+      ["agent", "TeacherAgent"]
+    ];
+    const STEPS_META = [
+      { title: "打开工作台", sub: "三栏桌面" },
+      { title: "同步棋谱", sub: "fox:sync" },
+      { title: "加载棋盘", sub: "library:record" },
+      { title: "KataGo 快扫", sub: "analyze-game-quick" },
+      { title: "精读当前手", sub: "live analysis" },
+      { title: "提问老师", sub: "teacher:run" },
+      { title: "工具取证", sub: "agent tools" },
+      { title: "流式讲棋", sub: "LLM stream" },
+      { title: "门禁回写", sub: "report + profile" }
+    ];
+
+    const state = {
+      playing: false,
+      paused: false,
+      step: -1,
+      games: [],
+      selected: null,
+      moveNumber: 0,
+      showCandidates: false,
+      evaluations: []
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const rawSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    async function sleep(ms) {
+      const end = Date.now() + ms;
+      while (Date.now() < end) {
+        if (!state.playing) return "stop";
+        while (state.paused && state.playing) await rawSleep(80);
+        if (!state.playing) return "stop";
+        await rawSleep(Math.min(40, Math.max(0, end - Date.now())));
+      }
+      return state.playing ? "ok" : "stop";
+    }
+    const gtpXY = (gtp) => {
+      const col = LETTERS.indexOf(gtp[0]);
+      const num = Number(gtp.slice(1));
+      return { col, rowFromTop: 19 - num };
+    };
+
+    function drawBoard() {
+      const svg = $("goban");
+      const pad = 28, size = 640, n = 19;
+      const gap = (size - pad * 2) / (n - 1);
+      const xy = (col, row) => [pad + col * gap, pad + row * gap];
+      let html = `<rect width="640" height="640" rx="12" fill="url(#wood)"/>`;
+      html += `<defs>
+        <linearGradient id="wood" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#e2b56d"/><stop offset="1" stop-color="#c38a45"/>
+        </linearGradient>
+        <radialGradient id="blk" cx="38%" cy="32%" r="70%">
+          <stop offset="0" stop-color="#5c6266"/><stop offset="1" stop-color="#111"/>
+        </radialGradient>
+        <radialGradient id="wht" cx="38%" cy="32%" r="70%">
+          <stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#cfc3b0"/>
+        </radialGradient>
+      </defs>`;
+      for (let i = 0; i < n; i++) {
+        const p = pad + i * gap;
+        html += `<line x1="${pad}" y1="${p}" x2="${size-pad}" y2="${p}" stroke="rgba(38,22,11,.74)" stroke-width="1.1"/>`;
+        html += `<line x1="${p}" y1="${pad}" x2="${p}" y2="${size-pad}" stroke="rgba(38,22,11,.74)" stroke-width="1.1"/>`;
+      }
+      [[3,3],[3,9],[3,15],[9,3],[9,9],[9,15],[15,3],[15,9],[15,15]].forEach(([c,r]) => {
+        const [x,y] = xy(c,r);
+        html += `<circle cx="${x}" cy="${y}" r="3.2" fill="#3a2b1d"/>`;
+      });
+      MOVES.slice(0, state.moveNumber).forEach(([color, gtp], index) => {
+        const { col, rowFromTop } = gtpXY(gtp);
+        const [x,y] = xy(col, rowFromTop);
+        const last = index === state.moveNumber - 1;
+        html += `<circle cx="${x}" cy="${y}" r="13.2" fill="url(#${color === "B" ? "blk" : "wht"})" />`;
+        if (last) html += `<circle cx="${x}" cy="${y}" r="4.4" fill="${color === "B" ? "#f3d27a" : "#c4453c"}"/>`;
+        html += `<text x="${x}" y="${y+4}" text-anchor="middle" font-size="8.5" font-weight="800" fill="${color === "B" ? "#f4efe3" : "#333"}">${index+1}</text>`;
+      });
+      if (state.showCandidates) {
+        CANDIDATES.forEach((c) => {
+          const { col, rowFromTop } = gtpXY(c.move);
+          const [x,y] = xy(col, rowFromTop);
+          html += `<circle cx="${x}" cy="${y}" r="14" fill="rgba(15,127,118,.16)" stroke="#0f7f76" stroke-width="2"/>`;
+          html += `<text x="${x}" y="${y-2}" text-anchor="middle" font-size="9" font-weight="800" fill="#145c56">${c.order}</text>`;
+          html += `<text x="${x}" y="${y+9}" text-anchor="middle" font-size="7" fill="#145c56">${c.winrate}%</text>`;
+        });
+      }
+      svg.innerHTML = html;
+    }
+
+    function drawWinrate() {
+      const svg = $("winrate");
+      const evals = state.evaluations;
+      let path = "";
+      evals.forEach((v, i) => {
+        const x = 8 + i * (504 / Math.max(evals.length - 1, 1));
+        const y = 8 + (100 - v) / 100 * 76;
+        path += (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+      });
+      const cursorX = state.moveNumber <= 0 ? 8 : 8 + (state.moveNumber - 1) * (504 / Math.max(Math.max(evals.length, 24) - 1, 1));
+      svg.innerHTML = `
+        <rect x="0" y="0" width="520" height="92" rx="8" fill="#fffdf7"/>
+        <line x1="8" y1="46" x2="512" y2="46" stroke="rgba(55,49,39,.16)"/>
+        <path d="${path}" fill="none" stroke="#4f9b91" stroke-width="2.2"/>
+        <line x1="${cursorX}" y1="8" x2="${cursorX}" y2="84" stroke="#c9655f" stroke-width="1.4"/>
+        <text x="12" y="16" font-size="10" fill="#756d60">黑胜率走势 · 快扫 + 关键手精读</text>
+      `;
+    }
+
+    function setPipeline(on) {
+      $("pipeline").innerHTML = PIPELINE.map(([id, label], i) => {
+        const node = `<span class="node ${on.includes(id) ? "on" : ""}">${label}</span>`;
+        return i ? `<span class="arrow">→</span>${node}` : node;
+      }).join("");
+    }
+
+    function setPills(kgReady, llmReady) {
+      $("kgPill").textContent = kgReady ? "KataGo 本地就绪" : "KataGo 未连接";
+      $("kgPill").className = "pill" + (kgReady ? " good" : "");
+      $("llmPill").textContent = llmReady ? "LLM 已验证" : "LLM 未配置";
+      $("llmPill").className = "pill" + (llmReady ? " good" : "");
+    }
+
+    function renderGames() {
+      $("gameList").innerHTML = state.games.map((g, i) => `
+        <div class="game ${state.selected === i ? "selected" : ""}" data-i="${i}">
+          <b>${g.title}</b>
+          <small>${g.black} vs ${g.white} · ${g.result} · ${g.source}</small>
+        </div>`).join("") || `<div class="msg" style="color:var(--text-faint)">还没有棋谱。</div>`;
+    }
+
+    function setNarration(title, body, chain) {
+      $("narrTitle").textContent = title;
+      $("narrBody").textContent = body;
+      $("chain").innerHTML = chain.map((line) => `<li>${line}</li>`).join("");
+    }
+
+    function setStepUi(index) {
+      [...document.querySelectorAll(".tl")].forEach((el, i) => {
+        el.className = "tl" + (i === index ? " active" : i < index ? " done" : "");
+      });
+      $("stepIndex").textContent = `步骤 ${Math.max(index, 0) + (index >= 0 ? 1 : 0)} / 9`;
+    }
+
+    function thread(html) { $("thread").innerHTML = html; }
+    function appendThread(html) { $("thread").insertAdjacentHTML("beforeend", html); $("thread").scrollTop = 9999; }
+
+    async function typeInto(el, text, speed = 16) {
+      el.textContent = "";
+      for (const ch of text) {
+        if (!state.playing) return;
+        el.textContent += ch;
+        $("thread").scrollTop = 9999;
+        const wait = await sleep(speed);
+        if (wait === "stop") return;
+      }
+    }
+
+    function moveCursor(el, click = true) {
+      const ghost = $("ghost");
+      const r = el.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      ghost.style.opacity = "1";
+      ghost.style.transform = `translate(${x}px, ${y}px) rotate(-30deg)`;
+      return sleep(420).then(async (token) => {
+        if (token === "stop") return token;
+        if (click) {
+          el.classList.add("hot");
+          ghost.classList.add("click");
+          await sleep(140);
+          ghost.classList.remove("click");
+        }
+        return "ok";
+      });
+    }
+
+    function buildTimeline() {
+      $("timeline").innerHTML = STEPS_META.map((s, i) =>
+        `<button class="tl" type="button" data-step="${i}"><b>${i + 1}. ${s.title}</b><span>${s.sub}</span></button>`
+      ).join("");
+    }
+
+    function resetWorld() {
+      state.games = [];
+      state.selected = null;
+      state.moveNumber = 0;
+      state.showCandidates = false;
+      state.evaluations = [];
+      setPills(false, false);
+      setPipeline([]);
+      renderGames();
+      $("studentCard").innerHTML = "尚未绑定棋手。同步野狐或导入 SGF 后会写入本地画像。";
+      $("foxInput").value = "";
+      $("gameTitle").textContent = "未选择棋谱";
+      $("gameMeta").textContent = "从左侧同步或导入一盘棋，加载后会自动开始 KataGo 分析。";
+      $("liveStatus").textContent = "等待棋谱";
+      $("liveStatus").className = "live warn";
+      $("issues").innerHTML = `<div class="issue">关键手会在快扫后出现</div>`;
+      thread(`<div class="msg">老师不是聊天框。快捷按钮和自然语言都会进入同一个 agent 循环：先调工具拿证据，再让 LLM 讲棋。</div>`);
+      $("prompt").value = "分析当前手为什么亏。";
+      document.querySelectorAll(".mini").forEach((el) => el.classList.remove("hot"));
+      drawBoard();
+      drawWinrate();
+    }
+
+    const steps = [
+      async function boot() {
+        setNarration("打开三栏工作台",
+          "桌面壳是 Electron + React。左侧棋谱库、中间 KTrain/Lizzie 风格棋盘、右侧老师对话区。启动时 renderer 通过 dashboard:get 拉本地设置、KataGo 探测结果和棋谱列表。",
+          [
+            "src/renderer/src/App.tsx → desktop-shell / library-rail / board-workspace / teacher-column",
+            "preload: ipcRenderer.invoke('dashboard:get')",
+            "src/main/index.ts dashboard() ← store + systemProfile"
+          ]);
+        setPipeline(["ui", "ipc", "main"]);
+        await moveCursor($("kgPill"), false);
+        setPills(true, true);
+      },
+      async function syncFox() {
+        setNarration("同步野狐公开棋谱",
+          "用户输入昵称后，主进程抓取公开棋谱、落盘到 ~/.goagent/library，并按昵称绑定学生画像。导入本地 SGF 走同一套 library 存储。",
+          [
+            "window.goagent.syncFox({ keyword })",
+            "IPC fox:sync → src/main/services/fox.ts syncFoxGames()",
+            "upsertGames() + bindFoxGamesToStudent() → studentProfile.ts"
+          ]);
+        await moveCursor($("foxInput"));
+        $("foxInput").value = "小明";
+        await sleep(280);
+        await moveCursor($("syncBtn"));
+        setPipeline(["ui", "ipc", "main", "sgf", "profile"]);
+        await sleep(400);
+        state.games = [
+          { title: "野狐 2026-04-25", black: "小明", white: "AI老师示例", result: "B+R", source: "Fox" },
+          { title: "野狐 2026-04-21", black: "小明", white: "7d_fox", result: "W+3.5", source: "Fox" },
+          { title: "导入 布局专题", black: "小明", white: "指导棋", result: "B+R", source: "SGF" }
+        ];
+        renderGames();
+        $("studentCard").innerHTML = `棋手 <b>小明</b> · 中级<br>弱点：<em>大场判断 7</em>　薄棋处理 5　先手意识 4<br>最近模式：中盘抢小官子、弱棋方向不清`;
+      },
+      async function loadGame() {
+        setNarration("选择棋谱并解析 SGF",
+          "点选一盘棋后，renderer 调 library:record。若是野狐谱会先 ensureFoxGameDownloaded，再由 SGF 解析器抽出主线手数、棋盘规格和贴目。",
+          [
+            "window.goagent.getGameRecord(gameId)",
+            "IPC library:record → ensureFoxGameDownloaded() + readGameRecord()",
+            "src/main/services/sgf.ts 解析主线 → GameRecord"
+          ]);
+        const card = document.querySelector(".game");
+        await moveCursor(card);
+        state.selected = 0;
+        renderGames();
+        $("gameTitle").textContent = "小明 vs AI老师示例";
+        $("gameMeta").textContent = "19路 · 贴目 7.5 · 24 手 · 结果 B+R";
+        setPipeline(["ui", "ipc", "main", "sgf"]);
+        $("liveStatus").textContent = "正在落子…";
+        for (let i = 1; i <= 24; i++) {
+          state.moveNumber = i;
+          drawBoard();
+          const wait = await sleep(42);
+          if (wait === "stop") return;
+        }
+      },
+      async function quickSweep() {
+        setNarration("加载后自动 KataGo 快扫",
+          "棋谱一到，工作台默认跑 analyze-game-quick：低 visits 扫整盘，再对 top-loss 关键手加访精读。进度事件驱动胜率图，而不是等整盘结束才画。",
+          [
+            "App.tsx queueAutoLiveAnalysis / analyzeGameQuick()",
+            "IPC katago:analyze-game-quick → analysis/scheduler.ts",
+            "analyzeGameQuickRuntime() → katago.ts kata-analyze JSON",
+            "事件 katago:analyze-game-quick-progress → WinrateTimelineV2"
+          ]);
+        await moveCursor($("liveStatus"), false);
+        setPipeline(["ui", "ipc", "main", "kg"]);
+        $("liveStatus").textContent = "快扫 0/24";
+        $("liveStatus").className = "live";
+        state.evaluations = [];
+        for (let i = 1; i <= 24; i++) {
+          const drift = Math.sin(i / 6) * 9 + Math.cos(i / 13) * 5;
+          const mistake = i === 24 ? 13 : 0;
+          const blackWr = Math.max(8, Math.min(92, 48 + drift + mistake));
+          state.evaluations.push(blackWr);
+          $("liveStatus").textContent = `快扫 ${i}/24 · ${Math.round(80 + i * 7)} vis/s`;
+          drawWinrate();
+          const wait = await sleep(55);
+          if (wait === "stop") return;
+        }
+        $("issues").innerHTML = `
+          <div class="issue active">24手 白 J17 · 疑问手 −13%</div>
+          <div class="issue">方向偏小，首选 Q10</div>
+          <div class="issue">目差约 −4.9 目</div>`;
+        $("liveStatus").textContent = "快扫完成 · 发现 1 个关键手";
+      },
+      async function livePosition() {
+        setNarration("切换手数后继续精读当前局面",
+          "点胜率图或关键手会 jumpToMove。除非用户主动暂停，否则继续对当前手做 live 流式分析：推荐点、胜率、目差、搜索数和 PV 变化图都会画在棋盘上。",
+          [
+            "jumpToMove() → analyzePositionStream() group=live",
+            "IPC katago:analyze-position-stream",
+            "katago:analyze-position-progress / search-progress",
+            "GoBoardV2 画候选点，悬停展示 PV"
+          ]);
+        state.showCandidates = true;
+        drawBoard();
+        $("liveStatus").textContent = "精读第 24 手 · 2410 visits";
+        setPipeline(["ui", "ipc", "main", "kg"]);
+        await moveCursor(document.querySelector(".issue.active"));
+      },
+      async function askTeacher() {
+        setNarration("向老师发起当前手任务",
+          "快捷按钮和自由输入走同一条 IPC：teacher:run。前端可把当前手的 KataGo 结果作为 prefetchedAnalysis 带上，避免老师再重算一遍。",
+          [
+            "runTeacherQuickTask / submitTeacherPromptText()",
+            "window.goagent.runTeacherTask({ mode:'current-move', gameId, moveNumber })",
+            "IPC teacher:run → runTeacherTask() in teacherAgent.ts",
+            "classifyTeacherIntent() → current-move"
+          ]);
+        await moveCursor($("qCurrent"));
+        $("prompt").value = "分析当前手为什么亏。";
+        thread(`
+          <div class="msg student">分析当前手为什么亏。</div>
+          <div class="tool running"><span class="st">running</span>teacher.classifyIntent<br>识别为 current-move · high · mode=current-move</div>
+        `);
+        setPipeline(["ui", "ipc", "main", "agent"]);
+      },
+      async function tools() {
+        setNarration("Agent 按需调用围棋工具",
+          "TeacherAgentRuntime 把工具目录交给 LLM。当前手被证据门禁要求至少完成：棋盘截图、KataGo 局面分析、知识匹配。缺一项就失败，不允许空口讲棋。",
+          [
+            "createTeacherAgentTools() 注册 library/sgf/katago/knowledge/profile/report…",
+            "board.captureTeachingImage ← renderer 回传 PNG",
+            "katago.analyzePosition / knowledge.matchPosition",
+            "studentProfile.read 带上长期弱点"
+          ]);
+        setPipeline(["main", "kg", "kb", "profile", "agent"]);
+        const logs = [
+          ["board.captureTeachingImage", "棋盘截图", "已生成第 24 手讲解图，标注 J17 / Q10"],
+          ["katago.analyzePosition", "KataGo 局面分析", "白胜率 56%→43%，首选 Q10，2410 visits"],
+          ["knowledge.matchPosition", "匹配棋形", "命中「星位点三三：脱先时机」强相关"],
+          ["studentProfile.read", "读取棋手画像", "小明 · 大场判断偏弱 · 先手意识不足"]
+        ];
+        for (const [name, label, detail] of logs) {
+          appendThread(`<div class="tool running"><span class="st">running</span>${label}<br><code>${name}</code></div>`);
+          const wait = await sleep(520);
+          if (wait === "stop") return;
+          const last = $("thread").querySelector(".tool.running");
+          if (last) last.outerHTML = `<div class="tool"><span class="st">done</span>${label}<br>${detail}</div>`;
+        }
+      },
+      async function lecture() {
+        setNarration("多模态 LLM 流式讲棋",
+          "真正发给模型的是：棋盘图 + KataGo 结构化事实 + 2～4 张知识卡摘录 + 学生画像。LLM 只负责教学语言。OpenAI-compatible 与 ChatGPT/Codex 是两种互不回退的连接，围棋工具仍由 GoAgent 自己管。",
+          [
+            "runProviderTurn() ← providerRegistry.ts",
+            "openai-compatible 或 codex-app-server 流式 delta",
+            "teacher:run-progress stage=assistant-delta → 右侧打字",
+            "KataGo 与知识卡冲突时，KataGo 说了算"
+          ]);
+        setPipeline(["agent", "llm", "ui"]);
+        appendThread(`<div class="msg" id="lecture"></div>`);
+        await typeInto($("lecture"),
+          "这手最大的问题不是局部亏了几目，而是方向偏小。白棋角上已经够稳，J17 继续补角，放过了右边全局最大点 Q10。KataGo 在补棋前白胜率约 56%，实战后落到 43%，大约 13% 的胜率、4.9 目。你最近的画像里「大场判断」已经连续出现，这手是同一类习惯：优势时还想把局部走厚。",
+          12);
+      },
+      async function gate() {
+        setNarration("证据门禁、报告和画像回写",
+          "回答结束后运行时会检查：当前手必须有截图、KataGo、知识匹配；Markdown 里的图证据也要能对上。通过后生成 TeachingArtifact，写入 ~/.goagent/teacher-reports，并可用 studentProfile.write 记住弱点。",
+          [
+            "requiredToolGroups['current-move'] 校验工具是否真的调用过",
+            "verifyVisionEvidenceMarkdown() 必要时让模型修正",
+            "artifact.createTeachingArtifact / report.saveAnalysis",
+            "studentProfile.write → ~/.goagent/profiles"
+          ]);
+        setPipeline(["agent", "profile", "ui"]);
+        appendThread(`
+          <div class="tool"><span class="st">done</span>证据门禁通过<br>截图 + KataGo + 知识匹配齐全，未放宽结论。</div>
+          <div class="tool"><span class="st">done</span>report.saveAnalysis<br>~/.goagent/teacher-reports/第24手分析/report.md</div>
+          <div class="tool"><span class="st">done</span>studentProfile.write<br>新增弱点计数：大场判断 8，训练重点：全局方向</div>
+        `);
+        $("studentCard").innerHTML = `棋手 <b>小明</b> · 中级 · 刚回写<br>弱点：<em>大场判断 8</em>　薄棋处理 5　先手意识 4<br>新训练：先找全局最大点 · 每盘标 3 个转折`;
+        $("liveStatus").textContent = "老师讲解完成 · 画像已更新";
+      }
+    ];
+
+    async function runFrom(index) {
+      state.playing = true;
+      state.paused = false;
+      $("playBtn").disabled = true;
+      $("pauseBtn").disabled = false;
+      for (let i = index; i < steps.length; i++) {
+        if (!state.playing) break;
+        while (state.paused) {
+          const wait = await sleep(120);
+          if (wait === "stop" && !state.playing) return;
+        }
+        state.step = i;
+        setStepUi(i);
+        await steps[i]();
+        if (!state.playing) break;
+        await sleep(260);
+      }
+      state.playing = false;
+      $("playBtn").disabled = false;
+      $("pauseBtn").disabled = true;
+      $("ghost").style.opacity = "0";
+    }
+
+    function pause() {
+      state.paused = true;
+    }
+    function stopAll() {
+      state.playing = false;
+      state.paused = false;
+    }
+
+    buildTimeline();
+    setPipeline([]);
+    resetWorld();
+    setStepUi(-1);
+
+    $("playBtn").onclick = () => {
+      if (state.step >= 8) {
+        resetWorld();
+        runFrom(0);
+        return;
+      }
+      if (state.paused) {
+        state.paused = false;
+        $("playBtn").disabled = true;
+        $("pauseBtn").disabled = false;
+        return;
+      }
+      const start = state.step < 0 ? 0 : state.step + 1;
+      runFrom(start);
+    };
+    $("pauseBtn").onclick = pause;
+    $("nextBtn").onclick = async () => {
+      stopAll();
+      const next = Math.min(state.step + 1, 8);
+      if (state.step < 0) resetWorld();
+      state.step = next;
+      setStepUi(next);
+      state.playing = true;
+      await steps[next]();
+      state.playing = false;
+      $("ghost").style.opacity = "0";
+    };
+    $("resetBtn").onclick = () => { stopAll(); state.step = -1; setStepUi(-1); resetWorld(); $("playBtn").disabled = false; $("pauseBtn").disabled = true; };
+    $("timeline").addEventListener("click", async (event) => {
+      const btn = event.target.closest(".tl");
+      if (!btn) return;
+      stopAll();
+      resetWorld();
+      const target = Number(btn.dataset.step);
+      state.playing = true;
+      for (let i = 0; i <= target; i++) {
+        state.step = i;
+        setStepUi(i);
+        await steps[i]();
+      }
+      state.playing = false;
+      $("ghost").style.opacity = "0";
+    });
+    $("composer").addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (state.playing) return;
+      stopAll();
+      resetWorld();
+      runFrom(0);
+    });
+
+    drawBoard();
+    drawWinrate();
+  </script>
+</body>
+</html>
