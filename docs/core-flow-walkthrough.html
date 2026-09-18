@@ -672,11 +672,11 @@
       },
       async function quickSweep() {
         setNarration("加载后自动 KataGo 快扫",
-          "棋谱一到，工作台默认跑 analyze-game-quick：低 visits 扫整盘，再对 top-loss 关键手加访精读。进度事件驱动胜率图，而不是等整盘结束才画。",
+          "选谱后工作台同时拉起两条分析：group=quick 低 visits 扫整盘画胜率图，group=live 精读当前手。调度器优先级是 live > teacher > quick，快扫不会把当前手精读挤掉。进度事件边到边画，不等整盘结束。",
           [
-            "App.tsx queueAutoLiveAnalysis / analyzeGameQuick()",
-            "IPC katago:analyze-game-quick → analysis/scheduler.ts",
-            "analyzeGameQuickRuntime() → katago.ts kata-analyze JSON",
+            "loadRecord() 并行 warmupEvaluationGraph() + queueAutoLiveAnalysis()",
+            "IPC katago:analyze-game-quick → runScheduledAnalysis(group:'quick')",
+            "analyzeGameQuickRuntime() → 先快扫再对 top-loss 加访精读",
             "事件 katago:analyze-game-quick-progress → WinrateTimelineV2"
           ]);
         await moveCursor($("liveStatus"), false);
@@ -701,13 +701,13 @@
         $("liveStatus").textContent = "快扫完成 · 发现 1 个关键手";
       },
       async function livePosition() {
-        setNarration("切换手数后继续精读当前局面",
-          "点胜率图或关键手会 jumpToMove。除非用户主动暂停，否则继续对当前手做 live 流式分析：推荐点、胜率、目差、搜索数和 PV 变化图都会画在棋盘上。",
+        setNarration("当前手 live 精读与试下",
+          "live 分析在选谱时就已经开始，不必等快扫结束。点胜率图或关键手会 jumpToMove，并重新排队当前手精读；只有用户点暂停才会停。棋盘上画推荐点、胜率、目差和 PV；试下分支走另一条 group=trial，老师讲解必须标明不是实战主线。",
           [
-            "jumpToMove() → analyzePositionStream() group=live",
-            "IPC katago:analyze-position-stream",
-            "katago:analyze-position-progress / search-progress",
-            "GoBoardV2 画候选点，悬停展示 PV"
+            "startLiveAnalysis() → analyzePositionStream() group=live",
+            "IPC katago:analyze-position-stream + search-progress",
+            "GoBoardV2 画候选点，悬停展示 PV",
+            "试下：katago:analyze-trial-position-stream → trialAnalysis"
           ]);
         state.showCandidates = true;
         drawBoard();
@@ -734,7 +734,7 @@
       },
       async function tools() {
         setNarration("Agent 按需调用围棋工具",
-          "TeacherAgentRuntime 把工具目录交给 LLM。当前手被证据门禁要求至少完成：棋盘截图、KataGo 局面分析、知识匹配。缺一项就失败，不允许空口讲棋。",
+          "TeacherAgentRuntime 把工具目录交给 LLM。当前手被运行时 requiredToolGroups 卡住：必须真正调用过棋盘截图、KataGo 局面分析、知识匹配。缺一项就失败。qualityGate.ts 是文档里的后置方案，当前热路径并不调用它。",
           [
             "createTeacherAgentTools() 注册 library/sgf/katago/knowledge/profile/report…",
             "board.captureTeachingImage ← renderer 回传 PNG",
